@@ -27,44 +27,54 @@ A complete multi-AZ networking layer, fully reproducible from code:
 - **Tier-first CIDR allocation** (public 0.x, private 10.x, db 20.x) so any IP in a log immediately reveals which tier it belongs to
 
 ## Architecture
+
 ## Architecture
 
-\`\`\`mermaid
-graph TB
-    Internet((Internet))
-    
-    subgraph VPC["VPC 10.0.0.0/16"]
-        IGW[Internet Gateway]
-        
-        subgraph AZ1["Availability Zone us-east-1a"]
-            PubA["Public Subnet<br/>10.0.0.0/24"]
-            PrivA["Private Subnet<br/>10.0.10.0/24"]
-            DbA["DB Subnet<br/>10.0.20.0/24"]
-            NAT[NAT Gateway]
-        end
-        
-        subgraph AZ2["Availability Zone us-east-1b"]
-            PubB["Public Subnet<br/>10.0.1.0/24"]
-            PrivB["Private Subnet<br/>10.0.11.0/24"]
-            DbB["DB Subnet<br/>10.0.21.0/24"]
-        end
-    end
-    
-    Internet <--> IGW
-    IGW <--> PubA
-    IGW <--> PubB
-    PubA --> NAT
-    NAT --> PrivA
-    NAT --> PrivB
-    
-    classDef public fill:#90EE90,stroke:#333,color:#000
-    classDef private fill:#FFD700,stroke:#333,color:#000
-    classDef db fill:#FFB6C1,stroke:#333,color:#000
-    
-    class PubA,PubB public
-    class PrivA,PrivB private
-    class DbA,DbB db
-\`\`\`
+```
+                              Internet
+                                  │
+                                  │
+                          ┌───────▼────────┐
+                          │ Internet GW    │
+                          └───────┬────────┘
+                                  │
+                  ┌───────────────┴───────────────┐
+                  │                               │
+        ╔═════════▼═══════════╗         ╔═════════▼═══════════╗
+        ║   us-east-1a        ║         ║   us-east-1b        ║
+        ║                     ║         ║                     ║
+        ║  ┌───────────────┐  ║         ║  ┌───────────────┐  ║
+        ║  │ Public Subnet │  ║         ║  │ Public Subnet │  ║
+        ║  │ 10.0.0.0/24   │  ║         ║  │ 10.0.1.0/24   │  ║
+        ║  │               │  ║         ║  │               │  ║
+        ║  │   NAT GW      │  ║         ║  │               │  ║
+        ║  └───────┬───────┘  ║         ║  └───────────────┘  ║
+        ║          │          ║         ║                     ║
+        ║  ┌───────▼───────┐  ║         ║  ┌───────────────┐  ║
+        ║  │Private Subnet │  ║         ║  │Private Subnet │  ║
+        ║  │ 10.0.10.0/24  │◄─╬─────────╬─►│ 10.0.11.0/24  │  ║
+        ║  │ (ECS tasks)   │  ║         ║  │ (ECS tasks)   │  ║
+        ║  └───────────────┘  ║         ║  └───────────────┘  ║
+        ║                     ║         ║                     ║
+        ║  ┌───────────────┐  ║         ║  ┌───────────────┐  ║
+        ║  │  DB Subnet    │  ║         ║  │  DB Subnet    │  ║
+        ║  │ 10.0.20.0/24  │  ║         ║  │ 10.0.21.0/24  │  ║
+        ║  │  (no internet │  ║         ║  │  (no internet │  ║
+        ║  │     route)    │  ║         ║  │     route)    │  ║
+        ║  └───────────────┘  ║         ║  └───────────────┘  ║
+        ╚═════════════════════╝         ╚═════════════════════╝
+
+        VPC: 10.0.0.0/16
+```
+
+**Traffic flow:**
+
+- **Inbound:** Internet → IGW → Public subnets (where the load balancer will live in Phase 2)
+- **Outbound from private:** Private subnets → NAT Gateway (in public 1a) → IGW → Internet
+- **Database isolation:** DB subnets have no `0.0.0.0/0` route — they cannot initiate connections to the internet, preventing data exfiltration if compromised
+
+**Cost-vs-availability tradeoff:**  
+Single NAT Gateway in `us-east-1a` chosen for cost (~$35/month savings vs. one per AZ). Production deployments would use one NAT per AZ to maintain AZ-level isolation.
 
 ## Tech Stack
 
