@@ -27,3 +27,83 @@ A complete multi-AZ networking layer, fully reproducible from code:
 - **Tier-first CIDR allocation** (public 0.x, private 10.x, db 20.x) so any IP in a log immediately reveals which tier it belongs to
 
 ## Architecture
+
+        Internet
+                   │
+                   ▼
+          ┌────────────────┐
+          │ Internet GW    │
+          └────────┬───────┘
+                   │
+    ┌──────────────┴──────────────┐
+    │                             │
+┌────▼─────┐                  ┌────▼─────┐
+│ Public   │                  │ Public   │
+│ subnet   │                  │ subnet   │
+│ (1a)     │                  │ (1b)     │
+│          │                  │          │
+│  NAT GW  │                  │          │
+└────┬─────┘                  └──────────┘
+│
+┌────▼─────┐                  ┌──────────┐
+│ Private  │                  │ Private  │
+│ subnet   │                  │ subnet   │
+│ (1a)     │                  │ (1b)     │
+└──────────┘                  └──────────┘
+┌──────────┐                  ┌──────────┐
+│ DB       │                  │ DB       │
+│ subnet   │                  │ subnet   │
+│ (1a)     │                  │ (1b)     │
+└──────────┘                  └──────────┘
+
+## Tech Stack
+
+- **AWS** — VPC, EC2 networking primitives, NAT Gateway, Elastic IP
+- **Terraform** ≥ 1.5, AWS provider 5.x
+- **Git Bash** on Windows for the development environment
+
+## Roadmap
+
+- **Phase 2:** Refactor into reusable modules, add security groups, ECS Fargate, Application Load Balancer
+- **Phase 3:** RDS PostgreSQL in private DB subnets with credentials in AWS Secrets Manager
+- **Phase 4:** CI/CD with GitHub Actions and OIDC federation (no long-lived AWS keys)
+- **Phase 5:** Observability — CloudWatch dashboards, alarms, container logs
+- **Phase 6:** Documentation polish, architecture diagram, video walkthrough
+
+## How to Reproduce
+
+```bash
+# Clone the repo
+git clone https://github.com/Mallaimy/aws-cloudnative-webapp.git
+cd aws-cloudnative-webapp
+
+# Configure AWS credentials
+aws configure
+
+# Initialize and review
+terraform init
+terraform plan
+
+# Apply (creates 19 resources)
+terraform apply
+
+# Destroy when done (avoid NAT Gateway charges)
+terraform destroy
+```
+
+## Cost Considerations
+
+This project includes resources that incur real AWS charges:
+- **NAT Gateway:** ~$0.045/hour ($1.08/day)
+- **Elastic IP:** ~$0.005/hour while allocated
+- Other resources (VPC, subnets, IGW, route tables) are free
+
+Recommended workflow during learning: `terraform destroy` between sessions, `terraform apply` when resuming. This costs near-zero and confirms the code is fully reproducible.
+
+## Project Status
+
+Active development. Built as part of a transition into Cloud/DevOps Engineering roles.
+
+---
+
+Built by [Abakar Mahamat Mallah](https://www.linkedin.com/in/abakar-mahamat-mallah-57b793218/) — AWS Solutions Architect Associate certified.
