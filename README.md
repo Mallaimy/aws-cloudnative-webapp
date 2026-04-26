@@ -27,34 +27,44 @@ A complete multi-AZ networking layer, fully reproducible from code:
 - **Tier-first CIDR allocation** (public 0.x, private 10.x, db 20.x) so any IP in a log immediately reveals which tier it belongs to
 
 ## Architecture
+## Architecture
 
-        Internet
-                   │
-                   ▼
-          ┌────────────────┐
-          │ Internet GW    │
-          └────────┬───────┘
-                   │
-    ┌──────────────┴──────────────┐
-    │                             │
-┌────▼─────┐                  ┌────▼─────┐
-│ Public   │                  │ Public   │
-│ subnet   │                  │ subnet   │
-│ (1a)     │                  │ (1b)     │
-│          │                  │          │
-│  NAT GW  │                  │          │
-└────┬─────┘                  └──────────┘
-│
-┌────▼─────┐                  ┌──────────┐
-│ Private  │                  │ Private  │
-│ subnet   │                  │ subnet   │
-│ (1a)     │                  │ (1b)     │
-└──────────┘                  └──────────┘
-┌──────────┐                  ┌──────────┐
-│ DB       │                  │ DB       │
-│ subnet   │                  │ subnet   │
-│ (1a)     │                  │ (1b)     │
-└──────────┘                  └──────────┘
+\`\`\`mermaid
+graph TB
+    Internet((Internet))
+    
+    subgraph VPC["VPC 10.0.0.0/16"]
+        IGW[Internet Gateway]
+        
+        subgraph AZ1["Availability Zone us-east-1a"]
+            PubA["Public Subnet<br/>10.0.0.0/24"]
+            PrivA["Private Subnet<br/>10.0.10.0/24"]
+            DbA["DB Subnet<br/>10.0.20.0/24"]
+            NAT[NAT Gateway]
+        end
+        
+        subgraph AZ2["Availability Zone us-east-1b"]
+            PubB["Public Subnet<br/>10.0.1.0/24"]
+            PrivB["Private Subnet<br/>10.0.11.0/24"]
+            DbB["DB Subnet<br/>10.0.21.0/24"]
+        end
+    end
+    
+    Internet <--> IGW
+    IGW <--> PubA
+    IGW <--> PubB
+    PubA --> NAT
+    NAT --> PrivA
+    NAT --> PrivB
+    
+    classDef public fill:#90EE90,stroke:#333,color:#000
+    classDef private fill:#FFD700,stroke:#333,color:#000
+    classDef db fill:#FFB6C1,stroke:#333,color:#000
+    
+    class PubA,PubB public
+    class PrivA,PrivB private
+    class DbA,DbB db
+\`\`\`
 
 ## Tech Stack
 
