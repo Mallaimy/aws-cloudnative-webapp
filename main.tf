@@ -71,3 +71,23 @@ resource "aws_subnet" "db" {
   }
 
 }
+
+# EIP (Elastic IPv4)
+resource "aws_eip" "nat" {
+  domain = "vpc"
+
+  tags = {
+    Name = "${var.project_name}-nat-eip"
+  }
+}
+
+# nat gateway
+resource "aws_nat_gateway" "main" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public[local.azs[0]].id
+
+  tags = {
+    Name = "${var.project_name}-nat"
+  }
+  depends_on = [aws_internet_gateway.main]
+}
