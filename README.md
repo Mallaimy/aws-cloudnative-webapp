@@ -26,7 +26,6 @@ A complete multi-AZ networking layer, fully reproducible from code:
 - **`default_tags` at the provider level** to enforce consistent tagging across all resources
 - **Tier-first CIDR allocation** (public 0.x, private 10.x, db 20.x) so any IP in a log immediately reveals which tier it belongs to
 
-## Architecture
 
 ## Architecture
 
@@ -75,6 +74,24 @@ A complete multi-AZ networking layer, fully reproducible from code:
 
 **Cost-vs-availability tradeoff:**  
 Single NAT Gateway in `us-east-1a` chosen for cost (~$35/month savings vs. one per AZ). Production deployments would use one NAT per AZ to maintain AZ-level isolation.
+
+## Project Structure
+
+```
+aws-cloudnative-webapp/
+├── main.tf              # Root: module orchestration
+├── variables.tf         # Root variables (project-wide)
+├── outputs.tf           # Root outputs (CLI access)
+├── providers.tf         # AWS provider configuration
+├── terraform.tfvars     # Variable values
+└── modules/
+    └── networking/
+        ├── main.tf      # VPC, subnets, IGW, NAT, route tables
+        ├── variables.tf # Module inputs (project_name, vpc_cidr, az_count)
+        └── outputs.tf   # Module outputs (vpc_id, subnet_ids, etc.)
+```
+
+The root module acts as an orchestrator — calling modules and wiring values between them. Each module is a self-contained unit with explicit inputs and outputs, making it reusable across projects.
 
 ## Tech Stack
 

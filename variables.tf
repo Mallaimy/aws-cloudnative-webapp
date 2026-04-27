@@ -4,6 +4,12 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "vpc_cidr" {
+  description = "cidr for the main VPC"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
 variable "project_name" {
   description = "Name of the project"
   type        = string
@@ -19,10 +25,4 @@ variable "environment" {
     condition     = contains(["dev", "staging", "prod"], var.environment)
     error_message = "Environment must be dev, staging, or prod."
   }
-}
-
-variable "vpc_cidr" {
-  description = "cidr for the main VPC"
-  type        = string
-  default     = "10.0.0.0/16"
 }
