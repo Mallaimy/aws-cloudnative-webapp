@@ -18,6 +18,23 @@ A complete multi-AZ networking layer, fully reproducible from code:
   - Private route table → NAT Gateway
   - Database route table → no internet route at all (only the local VPC route), preventing data exfiltration in case of compromise
 
+  ### Security Layer
+
+A defense-in-depth security group chain enforcing strict traffic flow:
+
+- **ALB Security Group** — accepts HTTP (80) and HTTPS (443) from the internet
+- **ECS Security Group** — accepts traffic only from the ALB security group, on the application port
+- **DB Security Group** — accepts traffic only from the ECS security group, on the PostgreSQL port (5432)
+
+The chain is enforced through security group references, not IP ranges:
+
+### Security engineering decisions
+
+- **No DB egress rule.** The database security group has zero outbound permissions. Security groups are stateful, so return traffic to ECS connections is allowed automatically — no egress needed for legitimate replies. Blocking egress prevents the database from initiating outbound connections, closing the data exfiltration vector even if the database is compromised.
+- **`name_prefix` instead of fixed names.** Combined with `lifecycle { create_before_destroy = true }`, this enables zero-downtime SG replacement. Fixed names cause deadlocks when an SG attached to a running resource needs replacement: AWS won't delete it, and a new SG can't take the same name.
+- **Modern rule resources.** Each rule is a separate `aws_vpc_security_group_ingress_rule` or `aws_vpc_security_group_egress_rule` resource. This gives surgical control over rules — adding, removing, or auditing one rule doesn't affect the others. The older inline-rule pattern caused Terraform to try to delete rules added by other tools or teams.
+- **Security group references over IP ranges.** Rules say "allow from ECS SG" not "allow from 10.0.10.0/24". The rules describe intent, are immune to IP changes, and remain correct even if subnet CIDRs are renumbered.
+
 ### Engineering decisions worth noting
 
 - **`for_each` over `count`** for all repeated resources to avoid index-shift problems
@@ -78,17 +95,15 @@ Single NAT Gateway in `us-east-1a` chosen for cost (~$35/month savings vs. one p
 ## Project Structure
 
 ```
-aws-cloudnative-webapp/
-├── main.tf              # Root: module orchestration
-├── variables.tf         # Root variables (project-wide)
-├── outputs.tf           # Root outputs (CLI access)
-├── providers.tf         # AWS provider configuration
-├── terraform.tfvars     # Variable values
 └── modules/
-    └── networking/
-        ├── main.tf      # VPC, subnets, IGW, NAT, route tables
-        ├── variables.tf # Module inputs (project_name, vpc_cidr, az_count)
-        └── outputs.tf   # Module outputs (vpc_id, subnet_ids, etc.)
+    ├── networking/
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    └── security/
+        ├── main.tf
+        ├── variables.tf
+        └── outputs.tf
 ```
 
 The root module acts as an orchestrator — calling modules and wiring values between them. Each module is a self-contained unit with explicit inputs and outputs, making it reusable across projects.
@@ -101,7 +116,7 @@ The root module acts as an orchestrator — calling modules and wiring values be
 
 ## Roadmap
 
-- **Phase 2:** Refactor into reusable modules, add security groups, ECS Fargate, Application Load Balancer
+- **Phase 2:** ECS Fargate compute layer, Application Load Balancer, target groups
 - **Phase 3:** RDS PostgreSQL in private DB subnets with credentials in AWS Secrets Manager
 - **Phase 4:** CI/CD with GitHub Actions and OIDC federation (no long-lived AWS keys)
 - **Phase 5:** Observability — CloudWatch dashboards, alarms, container logs
