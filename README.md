@@ -2,7 +2,7 @@
 
 A production-style multi-AZ AWS architecture built with Terraform, designed to demonstrate real-world DevOps and cloud engineering practices for portfolio purposes.
 
-## Current State — Phase 1: Networking Foundation ✅
+## Current State — Phase 1.5: Networking + Security ✅
 
 A complete multi-AZ networking layer, fully reproducible from code:
 
@@ -18,7 +18,7 @@ A complete multi-AZ networking layer, fully reproducible from code:
   - Private route table → NAT Gateway
   - Database route table → no internet route at all (only the local VPC route), preventing data exfiltration in case of compromise
 
-  ### Security Layer
+### Security Layer
 
 A defense-in-depth security group chain enforcing strict traffic flow:
 
@@ -27,6 +27,31 @@ A defense-in-depth security group chain enforcing strict traffic flow:
 - **DB Security Group** — accepts traffic only from the ECS security group, on the PostgreSQL port (5432)
 
 The chain is enforced through security group references, not IP ranges:
+
+```
+   Internet
+      │
+      │  HTTP (80) / HTTPS (443)
+      ▼
+┌──────────────┐
+│   ALB SG     │
+└──────┬───────┘
+       │
+       │  app port (8080)
+       ▼
+┌──────────────┐
+│   ECS SG     │
+└──────┬───────┘
+       │
+       │  PostgreSQL (5432)
+       ▼
+┌──────────────┐
+│    DB SG     │
+└──────────────┘
+
+  Each arrow is a deliberate ingress rule.
+  Everything else is implicitly denied.
+```
 
 ### Security engineering decisions
 
