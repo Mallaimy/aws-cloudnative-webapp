@@ -32,3 +32,8 @@ output "db_sg_id" {
   description = "ID of the database security group"
   value       = module.security.db_sg_id
 }
+
+output "alb_dns_name" {
+  description = "DNS name of the Application Load Balancer (use this URL to reach the application)"
+  value       = module.compute.alb_dns_name
+}

@@ -26,3 +26,9 @@ variable "environment" {
     error_message = "Environment must be dev, staging, or prod."
   }
 }
+
+variable "container_image" {
+  description = "Container image URI to run in ECS tasks (e.g., nginx:latest, account.dkr.ecr.us-east-1.amazonaws.com/myapp:v1)"
+  type        = string
+  default     = "nginx:latest"
+}

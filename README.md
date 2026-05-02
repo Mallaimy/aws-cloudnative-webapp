@@ -2,7 +2,7 @@
 
 A production-style multi-AZ AWS architecture built with Terraform, designed to demonstrate real-world DevOps and cloud engineering practices for portfolio purposes.
 
-## Current State — Phase 1.5: Networking + Security ✅
+## Current State — Phase 2: Compute Layer ✅
 
 A complete multi-AZ networking layer, fully reproducible from code:
 
@@ -59,6 +59,29 @@ The chain is enforced through security group references, not IP ranges:
 - **`name_prefix` instead of fixed names.** Combined with `lifecycle { create_before_destroy = true }`, this enables zero-downtime SG replacement. Fixed names cause deadlocks when an SG attached to a running resource needs replacement: AWS won't delete it, and a new SG can't take the same name.
 - **Modern rule resources.** Each rule is a separate `aws_vpc_security_group_ingress_rule` or `aws_vpc_security_group_egress_rule` resource. This gives surgical control over rules — adding, removing, or auditing one rule doesn't affect the others. The older inline-rule pattern caused Terraform to try to delete rules added by other tools or teams.
 - **Security group references over IP ranges.** Rules say "allow from ECS SG" not "allow from 10.0.10.0/24". The rules describe intent, are immune to IP changes, and remain correct even if subnet CIDRs are renumbered.
+
+### Compute Layer
+
+A containerized application layer running on ECS Fargate behind an Application Load Balancer:
+
+- **ECS Cluster** with Container Insights enabled for detailed metrics
+- **IAM Task Execution Role** scoped to ECR pulls, CloudWatch Logs, and Secrets Manager (least privilege)
+- **CloudWatch Log Group** capturing all container stdout/stderr with 7-day retention
+- **Application Load Balancer** in public subnets, multi-AZ, listening on HTTP/80
+- **Target Group** with HTTP health checks, IP-based targets for Fargate compatibility
+- **HTTP Listener** forwarding all traffic to the target group
+- **ECS Task Definition** specifying nginx container, 256 CPU / 512 MB memory, awsvpc network mode
+- **ECS Service** maintaining 2 tasks across both private subnets, registered to the target group
+
+### Compute engineering decisions
+
+- **Fargate over EC2 launch type.** No EC2 fleet to patch, scale, or manage. AWS handles the underlying compute. Tasks scale independently and are billed per-second.
+- **awsvpc network mode.** Each task gets its own ENI with a private IP and its own security group attachments. This is what makes the per-task firewall chain (ALB SG → ECS SG → DB SG) actually enforceable. In `bridge` or `host` mode, all containers on a host share networking, breaking per-task isolation.
+- **`assign_public_ip = false`.** Tasks live in private subnets with no public IPs. Outbound traffic goes through NAT; inbound is filtered by the ECS security group accepting only ALB traffic. Public IPs would be wasted (private subnet routes don't reach IGW anyway) and create misleading architecture signals.
+- **Target group `name_prefix` + `lifecycle.create_before_destroy`.** Port changes on a target group force replacement, but a target group can't be destroyed while a listener references it. The combination enables zero-downtime replacement: new TG creates with a unique random name, listener swaps to it, old TG is then safely destroyed.
+- **`container_insights = enabled` on the cluster.** Sends per-task CPU, memory, and network metrics to CloudWatch. Costs slightly more but enables real observability in Phase 5.
+- **Health check threshold of 2.** More aggressive than the AWS defaults (5/2). Faster failure detection in development; production might use the gentler defaults to avoid flapping.
+- **Container logs to CloudWatch with 7-day retention.** Cheap, auto-deleted, sufficient for development. Production would tier retention by log type — application logs at 30 days, audit logs at 90+, compliance logs forever.
 
 ### Engineering decisions worth noting
 
@@ -125,7 +148,11 @@ Single NAT Gateway in `us-east-1a` chosen for cost (~$35/month savings vs. one p
     │   ├── main.tf
     │   ├── variables.tf
     │   └── outputs.tf
-    └── security/
+    ├── security/
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    └── compute/
         ├── main.tf
         ├── variables.tf
         └── outputs.tf
@@ -141,7 +168,7 @@ The root module acts as an orchestrator — calling modules and wiring values be
 
 ## Roadmap
 
-- **Phase 2:** ECS Fargate compute layer, Application Load Balancer, target groups
+- **Phase 2:** ECS Fargate compute layer, Application Load Balancer, target groups ✅
 - **Phase 3:** RDS PostgreSQL in private DB subnets with credentials in AWS Secrets Manager
 - **Phase 4:** CI/CD with GitHub Actions and OIDC federation (no long-lived AWS keys)
 - **Phase 5:** Observability — CloudWatch dashboards, alarms, container logs
