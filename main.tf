@@ -22,3 +22,12 @@ module "compute" {
   container_image    = var.container_image
   app_port           = 80
 }
+
+module "database" {
+  source = "./modules/database"
+
+  project_name  = var.project_name
+  vpc_id        = module.networking.vpc_id
+  db_subnet_ids = module.networking.db_subnet_ids
+  db_sg_id      = module.security.db_sg_id
+}

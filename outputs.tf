@@ -37,3 +37,13 @@ output "alb_dns_name" {
   description = "DNS name of the Application Load Balancer (use this URL to reach the application)"
   value       = module.compute.alb_dns_name
 }
+
+output "db_endpoint" {
+  description = "Connection endpoint for the database"
+  value       = module.database.db_endpoint
+}
+
+output "db_secret_arn" {
+  description = "ARN of the database credentials secret"
+  value       = module.database.db_secret_arn
+}
