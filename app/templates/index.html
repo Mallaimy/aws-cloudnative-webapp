@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tell Me Your Paradigm</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #f7f5f0;
+      color: #222;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      letter-spacing: 0.04em;
+      color: #555;
+      font-weight: normal;
+      text-transform: uppercase;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #e0ddd8;
+      border-radius: 6px;
+      padding: 2rem;
+      max-width: 680px;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+
+    #question-text {
+      font-size: 1.35rem;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+      color: #111;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 0.75rem;
+      font-family: inherit;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      resize: vertical;
+      background: #fafaf8;
+      color: #222;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #888;
+      background: #fff;
+    }
+
+    .char-count {
+      font-size: 0.8rem;
+      color: #999;
+      text-align: right;
+      margin-top: 0.3rem;
+      margin-bottom: 1rem;
+    }
+
+    .char-count.warn { color: #c0392b; }
+
+    button {
+      background: #222;
+      color: #fff;
+      border: none;
+      padding: 0.65rem 1.6rem;
+      font-size: 0.95rem;
+      font-family: inherit;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    button:hover:not(:disabled) { background: #444; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+
+    #feedback {
+      display: none;
+      margin-top: 1rem;
+      padding: 0.7rem 1rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+
+    #feedback.success { background: #eafaf1; color: #1e7e46; border: 1px solid #b7dfc9; }
+    #feedback.error   { background: #fdf0ee; color: #c0392b; border: 1px solid #f0c0b8; }
+
+    .responses-section { max-width: 680px; width: 100%; }
+
+    .responses-section h2 {
+      font-size: 1rem;
+      color: #777;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 1rem;
+      font-weight: normal;
+    }
+
+    .response-item {
+      background: #fff;
+      border: 1px solid #e0ddd8;
+      border-radius: 6px;
+      padding: 1rem 1.2rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: #333;
+    }
+
+    .response-meta {
+      font-size: 0.75rem;
+      color: #aaa;
+      margin-top: 0.4rem;
+    }
+
+    #load-more {
+      display: none;
+      margin: 0.5rem auto 0;
+      background: transparent;
+      color: #555;
+      border: 1px solid #ccc;
+      padding: 0.5rem 1.2rem;
+    }
+
+    #load-more:hover:not(:disabled) { background: #f0ede8; }
+
+    @media (max-width: 480px) {
+      #question-text { font-size: 1.15rem; }
+      .card { padding: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Tell Me Your Paradigm</h1>
+</header>
+
+<div class="card">
+  <p id="question-text">{{ question.content }}</p>
+
+  <textarea
+    id="response-input"
+    placeholder="Write your answer here…"
+    maxlength="2000"
+    aria-label="Your response"
+  ></textarea>
+  <div class="char-count"><span id="char-remaining">2000</span> characters remaining</div>
+
+  <button id="submit-btn" onclick="submitResponse()">Submit</button>
+  <div id="feedback" role="alert"></div>
+</div>
+
+<div class="responses-section">
+  <h2 id="responses-heading" style="display:none">Others answered</h2>
+  <div id="responses-list"></div>
+  <button id="load-more" onclick="loadMore()">Load more</button>
+</div>
+
+<script>
+  const QUESTION_ID = {{ question.id }};
+  let currentPage = 1;
+  let totalResponses = 0;
+
+  const textarea = document.getElementById('response-input');
+  const charDisplay = document.getElementById('char-remaining');
+  const submitBtn = document.getElementById('submit-btn');
+  const feedback = document.getElementById('feedback');
+
+  textarea.addEventListener('input', () => {
+    const remaining = 2000 - textarea.value.length;
+    charDisplay.textContent = remaining;
+    charDisplay.parentElement.className = 'char-count' + (remaining < 100 ? ' warn' : '');
+  });
+
+  async function submitResponse() {
+    const content = textarea.value.trim();
+    if (!content) {
+      showFeedback('Please write something before submitting.', 'error');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    hideFeedback();
+
+    try {
+      const res = await fetch('/api/responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_id: QUESTION_ID, content }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showFeedback(data.error || 'Something went wrong.', 'error');
+        submitBtn.disabled = false;
+        return;
+      }
+
+      showFeedback('Your response was submitted. Thank you.', 'success');
+      textarea.value = '';
+      charDisplay.textContent = '2000';
+      charDisplay.parentElement.className = 'char-count';
+
+      // Reload responses from page 1 to show the fresh submission
+      currentPage = 1;
+      document.getElementById('responses-list').innerHTML = '';
+      await fetchResponses();
+    } catch {
+      showFeedback('Network error — please try again.', 'error');
+      submitBtn.disabled = false;
+    }
+  }
+
+  async function fetchResponses() {
+    try {
+      const res = await fetch(`/api/question/${QUESTION_ID}/responses?page=${currentPage}`);
+      const data = await res.json();
+      totalResponses = data.total;
+
+      const list = document.getElementById('responses-list');
+      data.responses.forEach(r => {
+        const div = document.createElement('div');
+        div.className = 'response-item';
+        const date = new Date(r.created_at).toLocaleDateString(undefined, {
+          year: 'numeric', month: 'short', day: 'numeric'
+        });
+        div.innerHTML =
+          `<div>${escapeHtml(r.content)}</div>` +
+          `<div class="response-meta">${date}</div>`;
+        list.appendChild(div);
+      });
+
+      const heading = document.getElementById('responses-heading');
+      const loadMoreBtn = document.getElementById('load-more');
+
+      if (totalResponses > 0) {
+        heading.style.display = 'block';
+      }
+
+      const shown = currentPage * 20;
+      if (shown < totalResponses) {
+        loadMoreBtn.style.display = 'block';
+        loadMoreBtn.disabled = false;
+      } else {
+        loadMoreBtn.style.display = 'none';
+      }
+    } catch {
+      // Non-critical: silently skip if responses can't load
+    }
+  }
+
+  async function loadMore() {
+    const btn = document.getElementById('load-more');
+    btn.disabled = true;
+    currentPage += 1;
+    await fetchResponses();
+  }
+
+  function showFeedback(msg, type) {
+    feedback.textContent = msg;
+    feedback.className = type;
+    feedback.style.display = 'block';
+  }
+
+  function hideFeedback() {
+    feedback.style.display = 'none';
+  }
+
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // Load existing responses on page open
+  fetchResponses();
+</script>
+</body>
+</html>

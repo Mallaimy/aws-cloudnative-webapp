@@ -1,0 +1,15 @@
+.git
+.gitignore
+.dockerignore
+Dockerfile
+.claude
+__pycache__
+*.pyc
+*.pyo
+.env
+.venv
+venv/
+.pytest_cache
+.mypy_cache
+.DS_Store
+README.md
