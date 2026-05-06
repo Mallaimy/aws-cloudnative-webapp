@@ -162,3 +162,20 @@ resource "aws_ecs_service" "app" {
     Name = "${var.project_name}-service"
   }
 }
+
+resource "aws_ecr_repository" "app" {
+  name                 = "${var.project_name}"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
+  }
+
+  tags = {
+    Name = "${var.project_name}-ecr"
+  }
+}

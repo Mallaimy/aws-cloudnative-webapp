@@ -47,3 +47,18 @@ output "db_secret_arn" {
   description = "ARN of the database credentials secret"
   value       = module.database.db_secret_arn
 }
+
+output "ecr_repository_url" {
+  description = "URL of the ECR repository for the application"
+  value       = module.compute.ecr_repository_url
+}
+
+output "ecr_repository_name" {
+  description = "Name of the ECR repository"
+  value       = module.compute.ecr_repository_name
+}
+
+output "github_actions_role_arn" {
+  description = "ARN of the IAM role for GitHub Actions"
+  value       = module.cicd.github_actions_role_arn
+}

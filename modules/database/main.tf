@@ -17,6 +17,7 @@ resource "random_password" "db_master" {
 
 resource "aws_secretsmanager_secret" "db" {
   name = "${var.project_name}-db-credentials"
+  recovery_window_in_days = 0 
 
   tags = {
     Name = "${var.project_name}-db-credentials"

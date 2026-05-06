@@ -32,3 +32,8 @@ variable "container_image" {
   type        = string
   default     = "nginx:latest"
 }
+
+variable "github_repository" {
+  description = "GitHub repository in 'owner/repo' format used by CI/CD"
+  type        = string
+}

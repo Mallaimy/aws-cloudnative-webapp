@@ -22,3 +22,13 @@ output "target_group_arn" {
   description = "ARN of the target group where ECS tasks register"
   value       = aws_lb_target_group.app.arn
 }
+
+output "ecr_repository_url" {
+  description = "URL of the ECR repository for the application"
+  value       = aws_ecr_repository.app.repository_url
+}
+
+output "ecr_repository_name" {
+  description = "Name of the ECR repository"
+  value       = aws_ecr_repository.app.name
+}

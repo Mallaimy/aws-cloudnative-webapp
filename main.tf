@@ -31,3 +31,11 @@ module "database" {
   db_subnet_ids = module.networking.db_subnet_ids
   db_sg_id      = module.security.db_sg_id
 }
+
+module "cicd" {
+  source = "./modules/cicd"
+
+  project_name            = var.project_name
+  github_repository       = var.github_repository
+  task_execution_role_arn = module.compute.task_execution_role_arn
+}
