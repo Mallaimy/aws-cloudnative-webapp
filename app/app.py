@@ -41,14 +41,26 @@ def release_conn(exc):
 def init_db():
     conn = pool.getconn()
     try:
-        with conn, conn.cursor() as cur:
-            with open("schema.sql") as f:
-                cur.execute(f.read())
+        # Schema setup (race-tolerant)
+        try:
+            with conn, conn.cursor() as cur:
+                with open("schema.sql") as f:
+                    cur.execute(f.read())
+        except psycopg2.errors.UniqueViolation:
+            conn.rollback()
 
-            cur.execute("SELECT COUNT(*) FROM questions")
-            (count,) = cur.fetchone()
-            if count == 0:
-                _seed_questions(cur)
+        # Seed setup (using advisory lock to serialize across workers)
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(12345)")
+            (got_lock,) = cur.fetchone()
+            if got_lock:
+                try:
+                    cur.execute("SELECT COUNT(*) FROM questions")
+                    (count,) = cur.fetchone()
+                    if count == 0:
+                        _seed_questions(cur)
+                finally:
+                    cur.execute("SELECT pg_advisory_unlock(12345)")
     finally:
         pool.putconn(conn)
 
