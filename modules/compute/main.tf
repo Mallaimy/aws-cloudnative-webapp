@@ -44,6 +44,20 @@ resource "aws_cloudwatch_log_group" "ecs" {
   }
 }
 
+resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
+  name = "${var.project_name}-ecs-task-execution-secrets"
+  role = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "secretsmanager:GetSecretValue"
+      Resource = var.db_secret_arn
+    }]
+  })
+}
+
 resource "aws_lb" "main" {
   name               = "${var.project_name}-alb"
   internal           = false
@@ -113,6 +127,17 @@ resource "aws_ecs_task_definition" "app" {
       image     = var.container_image
       essential = true
 
+      environment = [
+        { name = "DB_HOST", value = var.db_host },
+        { name = "DB_PORT", value = tostring(var.db_port) },
+        { name = "DB_NAME", value = var.db_name }
+      ]
+
+      secrets = [
+        { name = "DB_USER", valueFrom = "${var.db_secret_arn}:username::" },
+        { name = "DB_PASSWORD", valueFrom = "${var.db_secret_arn}:password::" }
+      ]
+
       portMappings = [
         {
           containerPort = var.app_port
@@ -135,6 +160,7 @@ resource "aws_ecs_task_definition" "app" {
   tags = {
     Name = "${var.project_name}-task-definition"
   }
+  lifecycle { ignore_changes = [container_definitions] }
 }
 
 resource "aws_ecs_service" "app" {
@@ -164,8 +190,9 @@ resource "aws_ecs_service" "app" {
 }
 
 resource "aws_ecr_repository" "app" {
-  name                 = "${var.project_name}"
+  name                 = var.project_name
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true

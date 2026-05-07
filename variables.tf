@@ -33,6 +33,12 @@ variable "container_image" {
   default     = "nginx:latest"
 }
 
+variable "app_port" {
+  description = "Port the application listens on inside containers"
+  type        = number
+  default     = 8080
+}
+
 variable "github_repository" {
   description = "GitHub repository in 'owner/repo' format used by CI/CD"
   type        = string

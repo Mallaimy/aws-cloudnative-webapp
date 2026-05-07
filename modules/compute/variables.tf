@@ -44,3 +44,23 @@ variable "container_image" {
   type        = string
 }
 
+variable "db_host" {
+  description = "Database host address (DNS name only, no port)"
+  type        = string
+}
+
+variable "db_port" {
+  description = "Database port"
+  type        = number
+}
+
+variable "db_name" {
+  description = "PostgreSQL database name"
+  type        = string
+}
+
+variable "db_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing DB credentials JSON"
+  type        = string
+}
+
