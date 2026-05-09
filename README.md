@@ -6,23 +6,6 @@ A production-style multi-AZ AWS architecture built with Terraform, designed to d
 
 ![Three-tier architecture with multi-AZ networking, defense-in-depth security groups, and OIDC-federated CI/CD](docs/architecture.png)
 
-## Deployment pipeline
-```
-Deployment pipeline (out-of-band, runs on every push to main):
-git push → GitHub Actions ─OIDC─► AWS STS ─► IAM Role
-│                                │
-▼                                ▼
-docker build  ───────────────►  ECR Repository
-│
-│ pull
-▼
-ECS Service ─► new task revision
-│
-▼
-Rolling deploy via ALB
-```
-
-**Traffic flow:**
 ### Traffic flow
 
 ```mermaid
@@ -44,7 +27,7 @@ flowchart LR
     end
 
     %% Inbound user traffic
-    User -->|HTTPS| IGW
+    User -->|HTTPS/HTTP| IGW
     IGW --> ALB
     ALB -->|port 8080| ECS
     ECS -->|port 5432| RDS
@@ -74,13 +57,24 @@ flowchart LR
 - **Bold orange arrows** — out-of-band deployment pipeline (developer → GitHub Actions → ECR → ECS)
 - **RDS in red** — database has no `0.0.0.0/0` route, cannot initiate outbound connections to the internet (data exfiltration prevention)
 
-- **Inbound (user):** Internet → IGW → ALB (public subnets) → ECS tasks (private, port 8080) → RDS (DB subnets, port 5432)
-- **Outbound from private:** Private subnets → NAT Gateway (in public 1a) → IGW → Internet
-- **Database isolation:** DB subnets have no `0.0.0.0/0` route — they cannot initiate connections to the internet, preventing data exfiltration if compromised
-- **Deployment (out-of-band):** GitHub Actions authenticates via OIDC, builds the image, pushes to ECR, and triggers a rolling ECS deployment
-
 **Cost-vs-availability tradeoff:**  
 Single NAT Gateway in `us-east-1a` chosen for cost (~$35/month savings vs. one per AZ). Production deployments would use one NAT per AZ to maintain AZ-level isolation.
+
+## Deployment pipeline
+```
+Deployment pipeline (out-of-band, runs on every push to main):
+git push → GitHub Actions ─OIDC─► AWS STS ─► IAM Role
+│                                │
+▼                                ▼
+docker build  ───────────────►  ECR Repository
+│
+│ pull
+▼
+ECS Service ─► new task revision
+│
+▼
+Rolling deploy via ALB
+```
 
 ## Tech Stack
 
