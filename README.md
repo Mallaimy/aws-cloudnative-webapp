@@ -2,9 +2,88 @@
 
 A production-style multi-AZ AWS architecture built with Terraform, designed to demonstrate real-world DevOps and cloud engineering practices for portfolio purposes.
 
+## Architecture
+
+![Three-tier architecture with multi-AZ networking, defense-in-depth security groups, and OIDC-federated CI/CD](docs/architecture.png)
+
+```
+Deployment pipeline (out-of-band, runs on every push to main):
+git push → GitHub Actions ─OIDC─► AWS STS ─► IAM Role
+│                                │
+▼                                ▼
+docker build  ───────────────►  ECR Repository
+│
+│ pull
+▼
+ECS Service ─► new task revision
+│
+▼
+Rolling deploy via ALB
+```
+
+**Traffic flow:**
+
+- **Inbound (user):** Internet → IGW → ALB (public subnets) → ECS tasks (private, port 8080) → RDS (DB subnets, port 5432)
+- **Outbound from private:** Private subnets → NAT Gateway (in public 1a) → IGW → Internet
+- **Database isolation:** DB subnets have no `0.0.0.0/0` route — they cannot initiate connections to the internet, preventing data exfiltration if compromised
+- **Deployment (out-of-band):** GitHub Actions authenticates via OIDC, builds the image, pushes to ECR, and triggers a rolling ECS deployment
+
+**Cost-vs-availability tradeoff:**  
+Single NAT Gateway in `us-east-1a` chosen for cost (~$35/month savings vs. one per AZ). Production deployments would use one NAT per AZ to maintain AZ-level isolation.
+
+## Tech Stack
+
+- **AWS** — VPC, ALB, ECS Fargate, ECR, RDS PostgreSQL, Secrets Manager, IAM, CloudWatch, NAT Gateway
+- **Terraform** ≥ 1.5, AWS provider 5.x — infrastructure as code across 5 modules
+- **Docker** — multi-stage builds, non-root user, healthcheck
+- **GitHub Actions** with **OIDC federation** — short-lived AWS credentials, no static keys
+- **Python / Flask** with **gunicorn** and **psycopg2** — application layer
+- **Git Bash** on Windows for the development environment
+
+## Project Structure
+
+```
+├── main.tf                    # Root module: orchestrates all sub-modules
+├── variables.tf
+├── outputs.tf
+├── terraform.tfvars           # Project-specific values (gitignored)
+│
+├── app/                       # Flask application
+│   ├── app.py
+│   ├── schema.sql
+│   ├── seed_questions.txt
+│   ├── requirements.txt
+│   ├── Dockerfile             # Multi-stage, non-root user
+│   ├── docker-compose.yml     # Local development
+│   └── templates/
+│       └── index.html
+│
+├── modules/
+│   ├── networking/            # VPC, subnets, IGW, NAT, route tables
+│   ├── security/              # ALB, ECS, DB security groups + rules
+│   ├── compute/               # ECS cluster, ALB, task def, service, ECR
+│   ├── database/              # RDS, subnet group, Secrets Manager
+│   └── cicd/                  # OIDC provider, IAM role, IAM policy
+│
+└── .github/
+└── workflows/
+└── deploy.yml         # CI/CD pipeline
+```
+The root module acts as an orchestrator — calling modules and wiring values between them. Each module is a self-contained unit with explicit inputs and outputs, making it reusable across projects.
+
 ## Current State — Phase 4: Application & CI/CD ✅
 
 A complete three-tier AWS web application, deployed automatically through a GitHub Actions pipeline using OIDC federation. Every push to `main` builds the container, pushes it to ECR, and rolls a new ECS task definition revision through the service — with no long-lived AWS credentials anywhere in the system.
+
+## Roadmap
+
+- **Phase 1:** Multi-AZ VPC networking foundation ✅
+- **Phase 1.5:** Defense-in-depth security group chain ✅
+- **Phase 2:** ECS Fargate compute layer, Application Load Balancer, target groups ✅
+- **Phase 3:** RDS PostgreSQL in private DB subnets with credentials in AWS Secrets Manager ✅
+- **Phase 4:** CI/CD with GitHub Actions and OIDC federation (no long-lived AWS keys) ✅
+- **Phase 5:** Observability — CloudWatch dashboards, alarms, container metrics, structured logging
+- **Phase 6:** Documentation polish, video walkthrough, Phase 6 application enhancements (URL-based question routing, likes, user-submitted questions)
 
 ### Network Layer
 
@@ -178,7 +257,7 @@ This is the modern way to handle credentials in GitHub Actions: no long-lived ac
 │  - IAM (PassRole)     │
 └───────────────────────┘
 ```
-### Phase 4 engineering decisions
+### CICD engineering decisions
 
 - **OIDC federation over long-lived AWS keys.** OIDC eliminates the classic risks of static IAM access keys in CI/CD: no secrets sitting in repository configuration, no manual rotation, no risk of a leaked key surviving for months. Each workflow run gets short-lived credentials (1 hour by default), scoped to one repository through the trust policy.
 
@@ -243,85 +322,6 @@ I updated `terraform.tfvars` to point at the full SHA so the task definition wou
 
 **The generalizable lesson.**  
 `git log --oneline` shows the short SHA for human readability, but `github.sha` in workflows is always the full 40-character SHA. Mixing the two is silent until something tries to look up an image by tag and finds nothing.
-
-## Architecture
-
-![Three-tier architecture with multi-AZ networking, defense-in-depth security groups, and OIDC-federated CI/CD](docs/architecture.png)
-
-```
-Deployment pipeline (out-of-band, runs on every push to main):
-git push → GitHub Actions ─OIDC─► AWS STS ─► IAM Role
-│                                │
-▼                                ▼
-docker build  ───────────────►  ECR Repository
-│
-│ pull
-▼
-ECS Service ─► new task revision
-│
-▼
-Rolling deploy via ALB
-```
-
-**Traffic flow:**
-
-- **Inbound (user):** Internet → IGW → ALB (public subnets) → ECS tasks (private, port 8080) → RDS (DB subnets, port 5432)
-- **Outbound from private:** Private subnets → NAT Gateway (in public 1a) → IGW → Internet
-- **Database isolation:** DB subnets have no `0.0.0.0/0` route — they cannot initiate connections to the internet, preventing data exfiltration if compromised
-- **Deployment (out-of-band):** GitHub Actions authenticates via OIDC, builds the image, pushes to ECR, and triggers a rolling ECS deployment
-
-**Cost-vs-availability tradeoff:**  
-Single NAT Gateway in `us-east-1a` chosen for cost (~$35/month savings vs. one per AZ). Production deployments would use one NAT per AZ to maintain AZ-level isolation.
-
-## Project Structure
-
-```
-├── main.tf                    # Root module: orchestrates all sub-modules
-├── variables.tf
-├── outputs.tf
-├── terraform.tfvars           # Project-specific values (gitignored)
-│
-├── app/                       # Flask application
-│   ├── app.py
-│   ├── schema.sql
-│   ├── seed_questions.txt
-│   ├── requirements.txt
-│   ├── Dockerfile             # Multi-stage, non-root user
-│   ├── docker-compose.yml     # Local development
-│   └── templates/
-│       └── index.html
-│
-├── modules/
-│   ├── networking/            # VPC, subnets, IGW, NAT, route tables
-│   ├── security/              # ALB, ECS, DB security groups + rules
-│   ├── compute/               # ECS cluster, ALB, task def, service, ECR
-│   ├── database/              # RDS, subnet group, Secrets Manager
-│   └── cicd/                  # OIDC provider, IAM role, IAM policy
-│
-└── .github/
-└── workflows/
-└── deploy.yml         # CI/CD pipeline
-```
-The root module acts as an orchestrator — calling modules and wiring values between them. Each module is a self-contained unit with explicit inputs and outputs, making it reusable across projects.
-
-## Tech Stack
-
-- **AWS** — VPC, ALB, ECS Fargate, ECR, RDS PostgreSQL, Secrets Manager, IAM, CloudWatch, NAT Gateway
-- **Terraform** ≥ 1.5, AWS provider 5.x — infrastructure as code across 5 modules
-- **Docker** — multi-stage builds, non-root user, healthcheck
-- **GitHub Actions** with **OIDC federation** — short-lived AWS credentials, no static keys
-- **Python / Flask** with **gunicorn** and **psycopg2** — application layer
-- **Git Bash** on Windows for the development environment
-
-## Roadmap
-
-- **Phase 1:** Multi-AZ VPC networking foundation ✅
-- **Phase 1.5:** Defense-in-depth security group chain ✅
-- **Phase 2:** ECS Fargate compute layer, Application Load Balancer, target groups ✅
-- **Phase 3:** RDS PostgreSQL in private DB subnets with credentials in AWS Secrets Manager ✅
-- **Phase 4:** CI/CD with GitHub Actions and OIDC federation (no long-lived AWS keys) ✅
-- **Phase 5:** Observability — CloudWatch dashboards, alarms, container metrics, structured logging
-- **Phase 6:** Documentation polish, video walkthrough, Phase 6 application enhancements (URL-based question routing, likes, user-submitted questions)
 
 ## How to Reproduce
 
