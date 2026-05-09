@@ -7,14 +7,13 @@ A production-style multi-AZ AWS architecture built with Terraform, designed to d
 ![Three-tier architecture with multi-AZ networking, defense-in-depth security groups, and OIDC-federated CI/CD](docs/architecture.png)
 
 ### Traffic flow
+### Traffic flow
 
 ```mermaid
 flowchart LR
-    subgraph Internet[" "]
-        User([👤 User])
-        Dev([👤 Developer])
-        GHA[GitHub Actions]
-    end
+    User([👤 User])
+    Dev([👤 Developer])
+    GHA[GitHub Actions]
 
     subgraph AWS["AWS Cloud"]
         IGW[Internet Gateway]
@@ -26,37 +25,38 @@ flowchart LR
         STS[AWS STS]
     end
 
-    %% Inbound user traffic
-    User -->|HTTPS/HTTP| IGW
+    %% 0-3: Inbound user traffic (blue)
+    User -->|HTTPS| IGW
     IGW --> ALB
     ALB -->|port 8080| ECS
     ECS -->|port 5432| RDS
 
-    %% Outbound from private
+    %% 4-5: Outbound from private (gray dashed)
     ECS -.->|outbound| NAT
     NAT -.-> IGW
 
-    %% Deployment pipeline (out-of-band)
-    Dev ==>|git push| GHA
-    GHA ==>|OIDC| STS
-    STS ==>|temp creds| GHA
-    GHA ==>|push image| ECR
-    ECR ==>|pull image| ECS
+    %% 6-10: Deployment pipeline (orange)
+    Dev -->|git push| GHA
+    GHA -->|OIDC| STS
+    STS -->|temp creds| GHA
+    GHA -->|push image| ECR
+    ECR -->|pull image| ECS
 
-    classDef userFlow stroke:#0066cc,stroke-width:2px
-    classDef deployFlow stroke:#cc6600,stroke-width:2px
-    classDef isolated fill:#ffe6e6,stroke:#cc0000
+    %% Edge styling by index
+    linkStyle 0,1,2,3 stroke:#0066cc,stroke-width:2px
+    linkStyle 4,5 stroke:#888888,stroke-width:1.5px,stroke-dasharray:5
+    linkStyle 6,7,8,9,10 stroke:#cc6600,stroke-width:2px
 
-    class RDS isolated
+    %% Node styling for the isolated database
+    style RDS fill:#ffe6e6,stroke:#cc0000,stroke-width:2px
 ```
 
 **Reading the diagram:**
 
-- **Solid blue arrows** — inbound user traffic (Internet → ALB → ECS → RDS)
-- **Dashed arrows** — outbound traffic from private subnets through NAT
-- **Bold orange arrows** — out-of-band deployment pipeline (developer → GitHub Actions → ECR → ECS)
+- **Blue arrows** — inbound user traffic (Internet → ALB → ECS → RDS)
+- **Gray dashed arrows** — outbound traffic from private subnets through NAT
+- **Orange arrows** — out-of-band deployment pipeline (developer → GitHub Actions → ECR → ECS)
 - **RDS in red** — database has no `0.0.0.0/0` route, cannot initiate outbound connections to the internet (data exfiltration prevention)
-
 **Cost-vs-availability tradeoff:**  
 Single NAT Gateway in `us-east-1a` chosen for cost (~$35/month savings vs. one per AZ). Production deployments would use one NAT per AZ to maintain AZ-level isolation.
 
