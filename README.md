@@ -243,44 +243,11 @@ I updated `terraform.tfvars` to point at the full SHA so the task definition wou
 
 **The generalizable lesson.**  
 `git log --oneline` shows the short SHA for human readability, but `github.sha` in workflows is always the full 40-character SHA. Mixing the two is silent until something tries to look up an image by tag and finds nothing.
+
 ## Architecture
 
-```
-                              Internet
-                                  │
-                                  │
-                          ┌───────▼────────┐
-                          │ Internet GW    │
-                          └───────┬────────┘
-                                  │
-                  ┌───────────────┴───────────────┐
-                  │                               │
-        ╔═════════▼═══════════╗         ╔═════════▼═══════════╗
-        ║   us-east-1a        ║         ║   us-east-1b        ║
-        ║                     ║         ║                     ║
-        ║  ┌───────────────┐  ║         ║  ┌───────────────┐  ║
-        ║  │ Public Subnet │  ║         ║  │ Public Subnet │  ║
-        ║  │ 10.0.0.0/24   │  ║         ║  │ 10.0.1.0/24   │  ║
-        ║  │               │  ║         ║  │               │  ║
-        ║  │   NAT GW      │  ║         ║  │               │  ║
-        ║  └───────┬───────┘  ║         ║  └───────────────┘  ║
-        ║          │          ║         ║                     ║
-        ║  ┌───────▼───────┐  ║         ║  ┌───────────────┐  ║
-        ║  │Private Subnet │  ║         ║  │Private Subnet │  ║
-        ║  │ 10.0.10.0/24  │◄─╬─────────╬─►│ 10.0.11.0/24  │  ║
-        ║  │ (ECS tasks)   │  ║         ║  │ (ECS tasks)   │  ║
-        ║  └───────────────┘  ║         ║  └───────────────┘  ║
-        ║                     ║         ║                     ║
-        ║  ┌───────────────┐  ║         ║  ┌───────────────┐  ║
-        ║  │  DB Subnet    │  ║         ║  │  DB Subnet    │  ║
-        ║  │ 10.0.20.0/24  │  ║         ║  │ 10.0.21.0/24  │  ║
-        ║  │  (no internet │  ║         ║  │  (no internet │  ║
-        ║  │     route)    │  ║         ║  │     route)    │  ║
-        ║  └───────────────┘  ║         ║  └───────────────┘  ║
-        ╚═════════════════════╝         ╚═════════════════════╝
+![Three-tier architecture with multi-AZ networking, defense-in-depth security groups, and OIDC-federated CI/CD](docs/architecture.png)
 
-        VPC: 10.0.0.0/16
-```
 Deployment pipeline (out-of-band, runs on every push to main):
 git push → GitHub Actions ─OIDC─► AWS STS ─► IAM Role
 │                                │
@@ -360,7 +327,7 @@ This project deploys to your own AWS account. Because the CI/CD pipeline uses OI
 
 ```bash
 # 1. Fork this repository on GitHub, then clone your fork
-git clone https://github.com/<your-username>/aws-cloudnative-webapp.git
+git clone https://github.com/Mallaimy/aws-cloudnative-webapp.git
 cd aws-cloudnative-webapp
 
 # 2. Configure AWS credentials for the initial bootstrap apply
