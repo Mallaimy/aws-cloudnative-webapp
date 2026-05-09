@@ -23,6 +23,56 @@ Rolling deploy via ALB
 ```
 
 **Traffic flow:**
+### Traffic flow
+
+```mermaid
+flowchart LR
+    subgraph Internet[" "]
+        User([👤 User])
+        Dev([👤 Developer])
+        GHA[GitHub Actions]
+    end
+
+    subgraph AWS["AWS Cloud"]
+        IGW[Internet Gateway]
+        ALB[ALB<br/>public subnets]
+        ECS[ECS Tasks<br/>private subnets<br/>port 8080]
+        RDS[(RDS PostgreSQL<br/>db subnets<br/>port 5432)]
+        NAT[NAT Gateway<br/>public subnet 1a]
+        ECR[ECR Repository]
+        STS[AWS STS]
+    end
+
+    %% Inbound user traffic
+    User -->|HTTPS| IGW
+    IGW --> ALB
+    ALB -->|port 8080| ECS
+    ECS -->|port 5432| RDS
+
+    %% Outbound from private
+    ECS -.->|outbound| NAT
+    NAT -.-> IGW
+
+    %% Deployment pipeline (out-of-band)
+    Dev ==>|git push| GHA
+    GHA ==>|OIDC| STS
+    STS ==>|temp creds| GHA
+    GHA ==>|push image| ECR
+    ECR ==>|pull image| ECS
+
+    classDef userFlow stroke:#0066cc,stroke-width:2px
+    classDef deployFlow stroke:#cc6600,stroke-width:2px
+    classDef isolated fill:#ffe6e6,stroke:#cc0000
+
+    class RDS isolated
+```
+
+**Reading the diagram:**
+
+- **Solid blue arrows** — inbound user traffic (Internet → ALB → ECS → RDS)
+- **Dashed arrows** — outbound traffic from private subnets through NAT
+- **Bold orange arrows** — out-of-band deployment pipeline (developer → GitHub Actions → ECR → ECS)
+- **RDS in red** — database has no `0.0.0.0/0` route, cannot initiate outbound connections to the internet (data exfiltration prevention)
 
 - **Inbound (user):** Internet → IGW → ALB (public subnets) → ECS tasks (private, port 8080) → RDS (DB subnets, port 5432)
 - **Outbound from private:** Private subnets → NAT Gateway (in public 1a) → IGW → Internet
