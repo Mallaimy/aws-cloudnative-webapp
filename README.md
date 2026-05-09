@@ -248,6 +248,7 @@ I updated `terraform.tfvars` to point at the full SHA so the task definition wou
 
 ![Three-tier architecture with multi-AZ networking, defense-in-depth security groups, and OIDC-federated CI/CD](docs/architecture.png)
 
+```
 Deployment pipeline (out-of-band, runs on every push to main):
 git push → GitHub Actions ─OIDC─► AWS STS ─► IAM Role
 │                                │
@@ -260,6 +261,7 @@ ECS Service ─► new task revision
 │
 ▼
 Rolling deploy via ALB
+```
 
 **Traffic flow:**
 
