@@ -368,6 +368,191 @@ I updated `terraform.tfvars` to point at the full SHA so the task definition wou
 **The generalizable lesson.**  
 `git log --oneline` shows the short SHA for human readability, but `github.sha` in workflows is always the full 40-character SHA. Mixing the two is silent until something tries to look up an image by tag and finds nothing.
 
+### Observability Layer — CloudWatch Dashboard
+
+After the CI/CD deployment of the Tell Me Your Paradigm app, I wanted to
+observe the deployment and monitor application performance. That's why I
+built a CloudWatch dashboard — so I could watch the metrics that matter
+and make decisions accordingly.
+
+The dashboard is a 3x3 grid with 9 widgets organized in three layers,
+matching the user request path through the architecture:
+
+- **User layer (ALB)** — what users actually experience
+- **Compute layer (ECS Fargate)** — how the containers are behaving
+- **Data layer (RDS PostgreSQL)** — how the database is holding up
+
+The whole thing is defined in Terraform as a separate `observability`
+module, respecting CloudWatch's grid constraints (0 ≤ x < 24).
+
+### What the dashboard answers
+
+Every dashboard should answer one question: **is the system healthy?**
+To answer it, I track the system layer by layer through the same path
+a user's request travels.
+
+**User layer (ALB):**
+- **TargetResponseTime (p99)** — how fast the app responds. I use p99,
+  not average, because averages hide the 1% of users having a bad time.
+- **RequestCount** — shows traffic patterns and spike moments. Helps
+  correlate "why is the system stressed?" with "are more users hitting it?"
+- **HTTPCode_Target_5XX_Count** — how many requests the application is
+  failing. Stays at zero when the system is healthy; spikes signal
+  something is broken downstream.
+
+**Compute layer (ECS Fargate):**
+- **CPUUtilization** — how hard the tasks are working
+- **MemoryUtilization** — how much memory the containers are using
+- **RunningTaskCount** — confirms the desired number of tasks are
+  actually running. Catches deployment failures and silent task crashes.
+
+**Data layer (RDS PostgreSQL):**
+- **CPUUtilization** — how hard the database is working. Often the root
+  cause of "the app is slow."
+- **DatabaseConnections** — how many active connections. Catches
+  connection pool leaks and connection limit exhaustion.
+- **FreeStorageSpace** — anticipates running-out-of-disk failures, which
+  cause writes to fail silently and the application to break in
+  hard-to-diagnose ways.
+
+This isn't a comprehensive dashboard. It's deliberately just 9 metrics.
+A health dashboard's job is fast confirmation in seconds, not deep
+investigation — deeper diagnosis lives in CloudWatch Logs Insights.
+
+### Dashboard in action
+
+![CloudWatch dashboard showing all 9 metrics across user, compute, and data layers](docs/dashboard.png)
+
+The screenshot above captures a typical operational view: traffic
+spikes on the ALB (501 requests during a load test), CPU and memory
+trends on the ECS tasks, database connection growth as workers
+reconnected, and the slow monotonic decline of free storage as data
+accumulates. The 5xx errors widget shows "No data" — which is the
+*desired* state. A healthy system has no errors to count.
+
+### Phase 5 engineering decisions
+
+- **Dashboard organized in three layers matching the request path.** User
+  experience metrics (ALB) on top, infrastructure metrics (compute, data)
+  below. Reading top-to-bottom mirrors how an engineer thinks during an
+  incident: "what is the user feeling?" then "what's causing it?"
+
+- **Statistics chosen by metric type, not by default.** Sum for count
+  metrics (RequestCount, error counts), Average for utilization metrics
+  (CPU, memory), p99 for time metrics (TargetResponseTime). Using
+  "Average" for everything is the most common dashboard mistake — it
+  hides outliers.
+
+- **`HTTPCode_Target_5XX_Count` over `HTTPCode_ELB_5XX_Count`.** The
+  Target version measures my application failing; the ELB version
+  measures ALB infrastructure issues. For an application health
+  dashboard, the Target version is what matters.
+
+- **Single LoadBalancer dimension on ALB widgets.** Dimensions in
+  CloudWatch are filters, not enrichments. Adding AvailabilityZone or
+  TargetGroup would narrow each widget to a subset of data, hiding
+  total system health. One dimension shows the full picture.
+
+- **Container Insights metrics live in a separate namespace.** Standard
+  ECS metrics (`AWS/ECS`) have CPU and Memory. RunningTaskCount lives
+  in `ECS/ContainerInsights`. AWS's namespace separation isn't obvious
+  from documentation — required `aws cloudwatch list-metrics` to find.
+
+- **`lifecycle.ignore_changes = [task_definition]` on the ECS service.**
+  CI/CD updates the task definition revision on every deploy. Without
+  this lifecycle directive, Terraform would roll back to whatever
+  revision is in its state. The ownership boundary is at the attribute
+  level: Terraform owns the service resource, but CI/CD owns this one
+  specific field on it.
+
+- **Observability as a separate Terraform module.** The dashboard
+  references resources from compute and database modules, but doesn't
+  belong in either. Putting it in its own module makes it reusable
+  across projects and keeps responsibility boundaries clean.
+  ### War stories: Phase 5
+
+Building the dashboard surfaced three bugs worth documenting.
+
+#### Bug 1: The bootstrap problem after destroy/recreate
+
+**The symptom.**  
+After destroying and reapplying infrastructure for Phase 5, the ECS
+tasks failed to start with `CannotPullContainerError: image not found`.
+The ECS service was healthy from Terraform's view but tasks were
+dying in a loop.
+
+**The diagnosis.**  
+ECR is destroyed with `force_delete = true`, which wipes all images.
+But my Terraform task definition still referenced the previous build's
+image SHA. After recreating, ECR was empty — the SHA didn't exist
+anywhere to pull from.
+
+**The fix.**  
+I pushed code through CI/CD. The pipeline built a new image, tagged
+it with a fresh SHA, pushed to ECR, and updated the ECS task
+definition. Tasks pulled successfully and the service stabilized.
+
+**The generalizable lesson.**  
+Production teams separate long-lived infrastructure from
+continuously-deployed code. That separation is why CI/CD owns the
+image and Terraform owns the platform. Whenever I destroy and rebuild,
+the first deploy needs to come through the pipeline, not from
+Terraform's cached state.
+
+#### Bug 2: The namespace mismatch
+
+**The symptom.**  
+Eight of nine dashboard widgets populated correctly. Only the Running
+Task Count widget showed "No data" — even though I'd just verified
+two healthy tasks running in the ECS console.
+
+**The diagnosis.**  
+I ran `aws cloudwatch list-metrics --namespace AWS/ECS` and confirmed
+the metric wasn't there. Then `aws cloudwatch list-metrics --namespace
+ECS/ContainerInsights` — there it was. AWS publishes the standard ECS
+CPU and Memory metrics under `AWS/ECS`, but task-level metrics like
+RunningTaskCount live under a separate namespace.
+
+**The fix.**  
+Changed the widget's namespace from `AWS/ECS` to `ECS/ContainerInsights`,
+applied via Terraform, refreshed the dashboard. Widget populated within
+five minutes.
+
+**The generalizable lesson.**  
+When something is missing, ask the system what it actually has — don't
+reason from what you think it should have. `aws cloudwatch list-metrics`
+is the equivalent of running `ls` to see what files actually exist on
+disk. Senior debugging is reading the data, not trusting your model
+of the data.
+
+#### Bug 3: The ECS service rollback
+
+**The symptom.**  
+After applying a routine dashboard fix, `terraform plan` showed it
+was about to roll the ECS service from task definition revision 14
+back to revision 13. The CI/CD pipeline had pushed revision 14;
+Terraform's state still expected revision 13.
+
+**The diagnosis.**  
+Phase 4 added `lifecycle.ignore_changes = [container_definitions]` to
+the task definition resource. But the ECS *service* resource has its
+own `task_definition` attribute — a pointer to which revision the
+service runs. That pointer was managed by Terraform, not CI/CD. So
+even though `container_definitions` was ignored, the service's
+revision pointer wasn't.
+
+**The fix.**  
+Added `lifecycle.ignore_changes = [task_definition]` on the
+`aws_ecs_service` resource. Now CI/CD's updates to which revision
+the service points at are fully respected by Terraform.
+
+**The generalizable lesson.**  
+Terraform's `ignore_changes` operates at the attribute level, not the
+resource level. When two systems share ownership of a resource —
+Terraform managing the structure, CI/CD managing the deploy — the
+ownership boundary is at specific attributes. Mapping that boundary
+correctly is what makes the two systems coexist instead of fighting.
+
 ## How to Reproduce
 
 This project deploys to your own AWS account. Because the CI/CD pipeline uses OIDC federation tied to a specific GitHub repository, you need to fork the repo first and update a few values.
