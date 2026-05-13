@@ -606,8 +606,6 @@ This project includes resources that incur real AWS charges. Approximate hourly 
 
 **Total: roughly $3.50/day while infrastructure is running.**
 
-**Total: roughly $3/day while infrastructure is running.**
-
 Recommended workflow during learning: `terraform destroy` between sessions, `terraform apply` when resuming. This costs near-zero and confirms the code is fully reproducible.
 
 ## Project Status
