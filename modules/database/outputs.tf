@@ -27,3 +27,8 @@ output "db_secret_name" {
   description = "Name of the Secrets Manager secret containing database credentials"
   value       = aws_secretsmanager_secret.db.name
 }
+
+output "db_instance_identifier" {
+  description = "Database name identifier"
+  value       = aws_db_instance.main.identifier
+}

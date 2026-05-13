@@ -32,3 +32,18 @@ output "ecr_repository_name" {
   description = "Name of the ECR repository"
   value       = aws_ecr_repository.app.name
 }
+
+output "alb_arn_suffix" {
+  description = "Suffix Name of the alb"
+  value       = aws_lb.main.arn_suffix
+}
+
+output "service_name" {
+  description = "ECS service name"
+  value       = aws_ecs_service.app.name
+}
+
+output "cluster_name" {
+  description = "ECS cluster name"
+  value       = aws_ecs_cluster.main.name
+}

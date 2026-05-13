@@ -43,3 +43,14 @@ module "cicd" {
   github_repository       = var.github_repository
   task_execution_role_arn = module.compute.task_execution_role_arn
 }
+
+module "observability" {
+  source = "./modules/observability"
+
+  project_name           = var.project_name
+  region                 = var.aws_region
+  cluster_name           = module.compute.cluster_name
+  service_name           = module.compute.service_name
+  alb_arn_suffix         = module.compute.alb_arn_suffix
+  db_instance_identifier = module.database.db_instance_identifier
+}
