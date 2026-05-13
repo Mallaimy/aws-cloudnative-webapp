@@ -7,7 +7,6 @@ A production-style multi-AZ AWS architecture built with Terraform, designed to d
 ![Three-tier architecture with multi-AZ networking, defense-in-depth security groups, and OIDC-federated CI/CD](docs/architecture.png)
 
 ### Traffic flow
-### Traffic flow
 
 ```mermaid
 flowchart LR
