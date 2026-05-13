@@ -75,11 +75,11 @@ ECS Service ─► new task revision
 ▼
 Rolling deploy via ALB
 ```
-
 ## Tech Stack
 
-- **AWS** — VPC, ALB, ECS Fargate, ECR, RDS PostgreSQL, Secrets Manager, IAM, CloudWatch, NAT Gateway
-- **Terraform** ≥ 1.5, AWS provider 5.x — infrastructure as code across 5 modules
+- **AWS** — VPC, ALB, ECS Fargate, ECR, RDS PostgreSQL, Secrets Manager, IAM, NAT Gateway
+- **AWS Observability** — CloudWatch Dashboards, CloudWatch Metrics, Container Insights
+- **Terraform** ≥ 1.5, AWS provider 5.x — infrastructure as code across 6 modules
 - **Docker** — multi-stage builds, non-root user, healthcheck
 - **GitHub Actions** with **OIDC federation** — short-lived AWS credentials, no static keys
 - **Python / Flask** with **gunicorn** and **psycopg2** — application layer
@@ -108,15 +108,22 @@ Rolling deploy via ALB
 │   ├── security/              # ALB, ECS, DB security groups + rules
 │   ├── compute/               # ECS cluster, ALB, task def, service, ECR
 │   ├── database/              # RDS, subnet group, Secrets Manager
-│   └── cicd/                  # OIDC provider, IAM role, IAM policy
+│   ├── cicd/                  # OIDC provider, IAM role, IAM policy
+│   └── observability/         # CloudWatch dashboard with 9 widgets
 │
+├── docs/
+│   ├── architecture.png       # Architecture diagram
+│   └── dashboard.png          # CloudWatch dashboard screenshot
+|
 └── .github/
 └── workflows/
 └── deploy.yml         # CI/CD pipeline
 ```
 The root module acts as an orchestrator — calling modules and wiring values between them. Each module is a self-contained unit with explicit inputs and outputs, making it reusable across projects.
 
-## Current State — Phase 4: Application & CI/CD ✅
+## Current State — Phase 5.1: Observability Dashboard ✅
+
+A complete three-tier AWS web application with CI/CD and observability. Every push to `main` builds, pushes, and deploys automatically through GitHub Actions with OIDC federation. A CloudWatch dashboard monitors health across the user, compute, and data layers.
 
 A complete three-tier AWS web application, deployed automatically through a GitHub Actions pipeline using OIDC federation. Every push to `main` builds the container, pushes it to ECR, and rolls a new ECS task definition revision through the service — with no long-lived AWS credentials anywhere in the system.
 
@@ -127,8 +134,8 @@ A complete three-tier AWS web application, deployed automatically through a GitH
 - **Phase 2:** ECS Fargate compute layer, Application Load Balancer, target groups ✅
 - **Phase 3:** RDS PostgreSQL in private DB subnets with credentials in AWS Secrets Manager ✅
 - **Phase 4:** CI/CD with GitHub Actions and OIDC federation (no long-lived AWS keys) ✅
-- **Phase 5:** Observability — CloudWatch dashboards, alarms, container metrics, structured logging
-- **Phase 6:** Documentation polish, video walkthrough, Phase 6 application enhancements (URL-based question routing, likes, user-submitted questions)
+- **Phase 5:** Observability — CloudWatch dashboard with 9 widgets across user, compute, and data layers ✅
+- **Phase 6:** HTTPS via ACM, application enhancements (URL routing, likes, user submissions), video walkthrough
 
 ### Network Layer
 
@@ -590,9 +597,14 @@ This project includes resources that incur real AWS charges. Approximate hourly 
 - **RDS db.t3.micro:** ~$0.018/hour (~$0.43/day)
 - **ECS Fargate (2 tasks @ 256/512):** ~$0.02/hour (~$0.48/day)
 - **Application Load Balancer:** ~$0.025/hour (~$0.60/day)
+- **Container Insights:** ~$0.50/day for additional ECS task metrics
 - **Elastic IP:** ~$0.005/hour while allocated
 - **ECR storage:** $0.10/GB-month (negligible — images are ~50MB)
+- **CloudWatch Dashboard:** free (up to 3 per account)
+- **CloudWatch Metrics:** free for AWS default metrics
 - Other resources (VPC, subnets, IGW, route tables, IAM) are free
+
+**Total: roughly $3.50/day while infrastructure is running.**
 
 **Total: roughly $3/day while infrastructure is running.**
 
