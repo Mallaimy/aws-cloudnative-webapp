@@ -136,7 +136,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         properties = {
           metrics = [
             [
-              "AWS/ContainerInsights",
+              "ECS/ContainerInsights",
               "RunningTaskCount",
               "ClusterName", "${var.cluster_name}",
               "ServiceName", "${var.service_name}"

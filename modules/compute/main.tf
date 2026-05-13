@@ -187,6 +187,9 @@ resource "aws_ecs_service" "app" {
   tags = {
     Name = "${var.project_name}-service"
   }
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 }
 
 resource "aws_ecr_repository" "app" {
